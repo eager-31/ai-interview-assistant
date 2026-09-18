@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     database_url: str
     redis_url: str
     google_api_key: str = ""
+    gemini_model: str = "gemini-3.6-flash"
     murf_api_key: str = ""
     assemblyai_api_key: str = ""
     jwt_secret: str = ""
