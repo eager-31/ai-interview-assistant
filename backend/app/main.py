@@ -7,6 +7,7 @@ from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
 from app.api import interview
 from app.core.config import settings
+from app.core.db import create_engine_and_sessionmaker
 from app.core.redis_client import create_redis
 from app.services.agent import build_agent
 from app.services.session import SESSION_TTL_SECONDS, SessionNotFound
@@ -15,15 +16,18 @@ from app.services.session import SESSION_TTL_SECONDS, SessionNotFound
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     redis = create_redis()
+    engine, db_sessionmaker = create_engine_and_sessionmaker()
     model = init_chat_model(f"google_genai:{settings.gemini_model}", api_key=settings.google_api_key)
     ttl = {"default_ttl": SESSION_TTL_SECONDS // 60}
     async with AsyncRedisSaver.from_conn_string(settings.redis_url, ttl=ttl) as checkpointer:
         await checkpointer.asetup()
         app.state.redis = redis
+        app.state.db_sessionmaker = db_sessionmaker
         app.state.model = model
         app.state.agent = build_agent(model, checkpointer)
         yield
     await redis.aclose()
+    await engine.dispose()
 
 
 app = FastAPI(title="AI Interview Assistant", lifespan=lifespan)
