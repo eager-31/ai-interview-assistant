@@ -13,8 +13,13 @@ from app.schemas.interview import FeedbackResponse
 # history and transcripts are read from.
 
 
-async def create_interview(db: AsyncSession, session_id: UUID, subject: str, first_question: str) -> None:
-    db.add(InterviewSession(id=session_id, subject=subject, turns=[Turn(question_number=1, question_text=first_question)]))
+async def create_interview(
+    db: AsyncSession, session_id: UUID, user_id: UUID, subject: str, first_question: str
+) -> None:
+    interview = InterviewSession(
+        id=session_id, user_id=user_id, subject=subject, turns=[Turn(question_number=1, question_text=first_question)]
+    )
+    db.add(interview)
     await db.commit()
 
 
@@ -35,12 +40,17 @@ async def record_answer(
     await db.commit()
 
 
-async def get_interview(db: AsyncSession, session_id: UUID) -> InterviewSession | None:
-    return await db.get(InterviewSession, session_id)
+async def get_interview(db: AsyncSession, session_id: UUID, user_id: UUID) -> InterviewSession | None:
+    interview = await db.get(InterviewSession, session_id)
+    if interview is None or interview.user_id != user_id:
+        return None
+    return interview
 
 
-async def list_interviews(db: AsyncSession) -> list[InterviewSession]:
-    result = await db.execute(select(InterviewSession).order_by(InterviewSession.started_at.desc()))
+async def list_interviews(db: AsyncSession, user_id: UUID) -> list[InterviewSession]:
+    result = await db.execute(
+        select(InterviewSession).where(InterviewSession.user_id == user_id).order_by(InterviewSession.started_at.desc())
+    )
     return list(result.scalars())
 
 

@@ -6,7 +6,8 @@ from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.db import get_db
 from app.core.redis_client import get_redis
-from app.models import Feedback
+from app.core.security import get_current_user
+from app.models import Feedback, User
 from app.schemas.interview import (
     AnswerRequest,
     AnswerResponse,
@@ -37,12 +38,13 @@ async def start_interview(
     request: Request,
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
     session_id = uuid4()
     question = await interview_agent.ask_first_question(request.app.state.agent, session_id, body.subject)
     # Stores are written after the LLM call succeeds so a failed start leaves no orphan session.
-    await records.create_interview(db, session_id, body.subject, question)
-    await sessions.create_session(redis, session_id, body.subject)
+    await records.create_interview(db, session_id, user.id, body.subject, question)
+    await sessions.create_session(redis, session_id, user.id, body.subject)
     return StartResponse(session_id=session_id, question_number=1, question=question)
 
 
@@ -52,8 +54,9 @@ async def submit_answer(
     request: Request,
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    session = await sessions.get_session(redis, body.session_id)
+    session = await sessions.get_session(redis, body.session_id, user.id)
     if session["status"] == "completed":
         raise HTTPException(status_code=409, detail={"error": "interview_completed", "message": "This interview is already finished."})
 
@@ -75,12 +78,13 @@ async def get_feedback(
     request: Request,
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
 ):
-    session = await sessions.get_session(redis, body.session_id)
+    session = await sessions.get_session(redis, body.session_id, user.id)
     if session["status"] != "completed":
         raise HTTPException(status_code=409, detail={"error": "interview_not_finished", "message": "Finish all questions before requesting feedback."})
 
-    interview = await records.get_interview(db, body.session_id)
+    interview = await records.get_interview(db, body.session_id, user.id)
     if interview.feedback is not None:
         return _feedback_out(interview.feedback)
 
@@ -92,8 +96,8 @@ async def get_feedback(
 
 
 @router.get("/history", response_model=list[InterviewSummary])
-async def interview_history(db: AsyncSession = Depends(get_db)):
-    interviews = await records.list_interviews(db)
+async def interview_history(db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)):
+    interviews = await records.list_interviews(db, user.id)
     return [
         InterviewSummary(
             id=i.id,
@@ -108,8 +112,10 @@ async def interview_history(db: AsyncSession = Depends(get_db)):
 
 
 @router.get("/{session_id}", response_model=InterviewDetail)
-async def interview_detail(session_id: UUID, db: AsyncSession = Depends(get_db)):
-    interview = await records.get_interview(db, session_id)
+async def interview_detail(
+    session_id: UUID, db: AsyncSession = Depends(get_db), user: User = Depends(get_current_user)
+):
+    interview = await records.get_interview(db, session_id, user.id)
     if interview is None:
         raise HTTPException(status_code=404, detail={"error": "interview_not_found", "message": "No interview with that id."})
     return InterviewDetail(

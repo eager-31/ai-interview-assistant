@@ -1,7 +1,7 @@
 from uuid import uuid4
 
 from app.main import app
-from tests.conftest import running_app
+from tests.conftest import log_in, running_app, sign_up
 from tests.test_sessions import run_interview
 
 
@@ -56,10 +56,13 @@ async def test_unknown_interview_returns_404(client):
 
 async def test_interview_survives_app_restart(created_sessions):
     async with running_app() as first_run:
+        email = await sign_up(first_run)
+        first_run.headers.update(await log_in(first_run, email))
         session_id, _ = await run_interview(first_run, created_sessions, "Python", [f"ans-{i}" for i in range(5)])
         await first_run.post("/api/interview/get-feedback", json={"session_id": session_id})
 
     async with running_app() as second_run:
+        second_run.headers.update(await log_in(second_run, email))
         detail = (await second_run.get(f"/api/interview/{session_id}")).json()
         assert len(detail["turns"]) == 5
         assert detail["feedback"]["score"] == 3

@@ -16,11 +16,12 @@ def _key(session_id: UUID) -> str:
     return f"session:{session_id}"
 
 
-async def create_session(redis: Redis, session_id: UUID, subject: str) -> None:
+async def create_session(redis: Redis, session_id: UUID, user_id: UUID, subject: str) -> None:
     key = _key(session_id)
     await redis.hset(
         key,
         mapping={
+            "user_id": str(user_id),
             "subject": subject,
             "status": "in_progress",
             "question_number": 1,
@@ -30,9 +31,10 @@ async def create_session(redis: Redis, session_id: UUID, subject: str) -> None:
     await redis.expire(key, SESSION_TTL_SECONDS)
 
 
-async def get_session(redis: Redis, session_id: UUID) -> dict[str, str]:
+async def get_session(redis: Redis, session_id: UUID, user_id: UUID) -> dict[str, str]:
     session = await redis.hgetall(_key(session_id))
-    if not session:
+    # Someone else's session looks exactly like a missing one, so ids can't be probed.
+    if not session or session["user_id"] != str(user_id):
         raise SessionNotFound(str(session_id))
     return session
 

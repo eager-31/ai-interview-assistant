@@ -12,8 +12,7 @@ class InterviewSession(Base):
 
     # Same UUID as the Redis session_id, so one id identifies the interview in both stores.
     id: Mapped[uuid.UUID] = mapped_column(primary_key=True)
-    # Nullable until Phase 3 adds login and every session belongs to a user.
-    user_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("users.id"), index=True)
+    user_id: Mapped[uuid.UUID] = mapped_column(ForeignKey("users.id"), index=True)
     subject: Mapped[str] = mapped_column(String(100))
     status: Mapped[str] = mapped_column(String(20), default="in_progress")
     started_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

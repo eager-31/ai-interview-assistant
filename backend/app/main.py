@@ -5,7 +5,7 @@ from fastapi.responses import JSONResponse
 from langchain.chat_models import init_chat_model
 from langgraph.checkpoint.redis.aio import AsyncRedisSaver
 
-from app.api import interview
+from app.api import auth, interview
 from app.core.config import settings
 from app.core.db import create_engine_and_sessionmaker
 from app.core.redis_client import create_redis
@@ -31,6 +31,7 @@ async def lifespan(app: FastAPI):
 
 
 app = FastAPI(title="AI Interview Assistant", lifespan=lifespan)
+app.include_router(auth.router)
 app.include_router(interview.router)
 
 
