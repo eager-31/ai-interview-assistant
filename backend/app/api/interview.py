@@ -1,12 +1,15 @@
+import asyncio
 import logging
+from typing import Annotated
 from uuid import UUID, uuid4
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.core.config import settings
 from app.core.db import get_db
+from app.core.errors import ApiError
 from app.core.limiter import limiter
 from app.core.logging import bind_session
 from app.core.redis_client import get_redis
@@ -19,12 +22,12 @@ from app.schemas.interview import (
     FeedbackResponse,
     InterviewDetail,
     InterviewSummary,
-    StartRequest,
     StartResponse,
     TurnOut,
 )
 from app.services import agent as interview_agent
 from app.services import records
+from app.services.resume import MAX_RESUME_BYTES, ResumeError, extract_resume_text
 from app.services import session as sessions
 
 router = APIRouter(prefix="/api/interview", tags=["interview"])
@@ -37,21 +40,47 @@ def _feedback_out(row: Feedback | None) -> FeedbackResponse | None:
     return FeedbackResponse(score=row.score, feedback=row.feedback_text, areas_of_improvement=row.areas_of_improvement)
 
 
+async def _read_resume(upload: UploadFile | None) -> str | None:
+    # Browsers send an empty file part when no file was chosen; that means "no resume".
+    if upload is None or not upload.filename:
+        return None
+    data = await upload.read(MAX_RESUME_BYTES + 1)
+    if len(data) > MAX_RESUME_BYTES:
+        raise ApiError(413, "resume_too_large", f"The resume must be {MAX_RESUME_BYTES // (1024 * 1024)} MB or smaller.")
+    try:
+        # pypdf is synchronous and CPU-bound, so it runs off the event loop.
+        return await asyncio.to_thread(extract_resume_text, data)
+    except ResumeError as exc:
+        raise ApiError(422, "resume_unreadable", str(exc)) from exc
+
+
 @router.post("/start", response_model=StartResponse)
 async def start_interview(
-    body: StartRequest,
     request: Request,
+    subject: Annotated[str, Form(min_length=1, max_length=100)],
+    job_description: Annotated[str | None, Form(max_length=10_000)] = None,
+    resume: UploadFile | None = None,
     redis: Redis = Depends(get_redis),
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_user),
 ):
     session_id = uuid4()
     bind_session(session_id)
-    question = await interview_agent.ask_first_question(request.app.state.agent, session_id, body.subject)
+    # An empty textarea arrives as "" or whitespace, which means "not provided".
+    job_description = (job_description or "").strip() or None
+    resume_text = await _read_resume(resume)
+    background = None
+    if resume_text or job_description:
+        background = await interview_agent.summarize_background(request.app.state.model, resume_text, job_description)
+    system_prompt = interview_agent.build_system_prompt(subject, background)
+    question = await interview_agent.ask_first_question(request.app.state.agent, session_id, subject, system_prompt)
     # Stores are written after the LLM call succeeds so a failed start leaves no orphan session.
-    await records.create_interview(db, session_id, user.id, body.subject, question)
-    await sessions.create_session(redis, session_id, user.id, body.subject)
-    logger.info("interview started", extra={"subject": body.subject, "user_id": str(user.id)})
+    await records.create_interview(db, session_id, user.id, subject, question)
+    await sessions.create_session(redis, session_id, user.id, subject)
+    logger.info(
+        "interview started",
+        extra={"subject": subject, "user_id": str(user.id), "used_resume": bool(resume_text), "used_job_description": bool(job_description)},
+    )
     return StartResponse(session_id=session_id, question_number=1, question=question)
 
 

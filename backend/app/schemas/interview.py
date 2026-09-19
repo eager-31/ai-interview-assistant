@@ -4,8 +4,13 @@ from uuid import UUID
 from pydantic import BaseModel, ConfigDict, Field
 
 
-class StartRequest(BaseModel):
-    subject: str = Field(min_length=1, max_length=100)
+class BackgroundSummary(BaseModel):
+    """What the interviewer needs to know about the candidate, extracted from a resume and/or job description."""
+
+    target_role: str = Field(default="", description="The role the candidate is interviewing for, if stated")
+    key_skills: list[str] = Field(default_factory=list, description="Up to 12 of the most relevant skills or technologies")
+    experience_summary: str = Field(default="", description="Two or three sentences on the candidate's relevant experience")
+    notable_projects: list[str] = Field(default_factory=list, description="Up to 5 projects or achievements worth asking about")
 
 
 class StartResponse(BaseModel):

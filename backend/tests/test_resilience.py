@@ -62,7 +62,7 @@ LLM_FAILURES = [
 async def test_llm_failures_map_to_distinct_responses_and_are_not_retried(client, error, status, code):
     app.state.agent = FailingAgent(error)
 
-    response = await client.post("/api/interview/start", json={"subject": "Python"})
+    response = await client.post("/api/interview/start", data={"subject": "Python"})
 
     assert response.status_code == status
     assert response.json()["detail"]["error"] == code
@@ -72,7 +72,7 @@ async def test_llm_failures_map_to_distinct_responses_and_are_not_retried(client
 
 async def test_failed_start_leaves_no_interview_behind(client):
     app.state.agent = FailingAgent(GoogleRateLimitError("quota"))
-    await client.post("/api/interview/start", json={"subject": "Python"})
+    await client.post("/api/interview/start", data={"subject": "Python"})
 
     assert (await client.get("/api/interview/history")).json() == []
 
@@ -197,7 +197,7 @@ async def test_llm_failure_is_logged_with_the_session_id(client, caplog):
     caplog.set_level(logging.WARNING)
     app.state.agent = FailingAgent(GoogleRateLimitError("quota"))
 
-    await client.post("/api/interview/start", json={"subject": "Python"})
+    await client.post("/api/interview/start", data={"subject": "Python"})
 
     failure = next(r for r in caplog.records if r.getMessage() == "llm call failed")
     assert failure.session_id is not None

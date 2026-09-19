@@ -5,7 +5,7 @@ from app.main import app
 
 
 async def run_interview(client, created, subject, answers):
-    start = await client.post("/api/interview/start", json={"subject": subject})
+    start = await client.post("/api/interview/start", data={"subject": subject})
     assert start.status_code == 200
     session_id = start.json()["session_id"]
     created.append(session_id)

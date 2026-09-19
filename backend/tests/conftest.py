@@ -14,7 +14,7 @@ from app.core.limiter import limiter
 from app.core.redis_client import create_redis
 from app.main import app
 from app.models import InterviewSession, User
-from app.schemas.interview import FeedbackResponse
+from app.schemas.interview import BackgroundSummary, FeedbackResponse
 from app.services.agent import build_agent
 
 
@@ -48,14 +48,26 @@ class EchoModel(BaseChatModel):
 
 
 class StubFeedbackModel:
+    """Stands in for the real model wherever the app asks for structured output."""
+
     def __init__(self):
         self.calls = 0
+        self.summary_calls = 0
+        self.last_summary_input = None
 
     def with_structured_output(self, schema):
         model = self
 
         class Evaluator:
             async def ainvoke(self, messages):
+                if schema is BackgroundSummary:
+                    model.summary_calls += 1
+                    model.last_summary_input = messages
+                    return BackgroundSummary(
+                        target_role="Stub Role",
+                        key_skills=[w for w in str(messages).replace("\n", " ").split() if w.startswith("skill-")],
+                        experience_summary="Stub experience.",
+                    )
                 model.calls += 1
                 transcript = " | ".join(str(m.content) for m in messages)
                 return FeedbackResponse(score=3, feedback=transcript, areas_of_improvement="n/a")

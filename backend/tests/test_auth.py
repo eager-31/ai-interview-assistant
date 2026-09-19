@@ -82,17 +82,17 @@ async def test_wrong_password_and_unknown_email_look_identical(anonymous_client)
 
 
 PROTECTED = [
-    ("post", "/api/interview/start", {"subject": "Python"}),
-    ("post", "/api/interview/submit-answer", {"session_id": str(uuid4()), "answer": "x"}),
-    ("post", "/api/interview/get-feedback", {"session_id": str(uuid4())}),
-    ("get", "/api/interview/history", None),
-    ("get", f"/api/interview/{uuid4()}", None),
+    ("post", "/api/interview/start", {"data": {"subject": "Python"}}),
+    ("post", "/api/interview/submit-answer", {"json": {"session_id": str(uuid4()), "answer": "x"}}),
+    ("post", "/api/interview/get-feedback", {"json": {"session_id": str(uuid4())}}),
+    ("get", "/api/interview/history", {}),
+    ("get", f"/api/interview/{uuid4()}", {}),
 ]
 
 
-@pytest.mark.parametrize("method,path,body", PROTECTED)
-async def test_interview_routes_require_a_token(anonymous_client, method, path, body):
-    response = await getattr(anonymous_client, method)(path, **({"json": body} if body else {}))
+@pytest.mark.parametrize("method,path,kwargs", PROTECTED)
+async def test_interview_routes_require_a_token(anonymous_client, method, path, kwargs):
+    response = await getattr(anonymous_client, method)(path, **kwargs)
     assert response.status_code == 401
     assert response.json()["detail"]["error"] == "unauthorized"
     assert response.headers["www-authenticate"] == "Bearer"
