@@ -14,7 +14,7 @@ async def run_interview(client, created, subject, answers):
     for answer in answers:
         last = await client.post("/api/interview/submit-answer", json={"session_id": session_id, "answer": answer})
         assert last.status_code == 200
-    return session_id, last.json()
+    return session_id, (last.json() if last else None)
 
 
 async def transcript(session_id):

@@ -8,7 +8,9 @@ from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from sqlalchemy import delete, select
 
+from app.core.config import settings
 from app.core.db import create_engine_and_sessionmaker
+from app.core.limiter import limiter
 from app.core.redis_client import create_redis
 from app.main import app
 from app.models import InterviewSession, User
@@ -96,6 +98,15 @@ async def other_client(client):
 async def anonymous_client(client):
     async with _new_client() as c:
         yield c
+
+
+@pytest.fixture(autouse=True)
+def _relaxed_rate_limit(monkeypatch):
+    """Tests submit many answers quickly; the rate-limit test sets its own low limit."""
+    monkeypatch.setattr(settings, "submit_answer_rate_limit", "1000/minute")
+    limiter.reset()
+    yield
+    limiter.reset()
 
 
 @pytest.fixture(autouse=True)

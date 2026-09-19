@@ -3,6 +3,7 @@ from uuid import UUID
 from langchain.agents import create_agent
 from langchain_core.messages import HumanMessage
 
+from app.core.errors import llm_errors
 from app.schemas.interview import FeedbackResponse
 
 TOTAL_QUESTIONS = 5
@@ -34,15 +35,16 @@ def _config(session_id: UUID) -> dict:
 
 
 async def ask_first_question(agent, session_id: UUID, subject: str) -> str:
-    result = await agent.ainvoke(
-        {
-            "messages": [
-                {"role": "system", "content": INTERVIEW_PROMPT.format(subject=subject, total=TOTAL_QUESTIONS)},
-                {"role": "user", "content": f"Start the interview with a short greeting and ask the first question about {subject}."},
-            ]
-        },
-        config=_config(session_id),
-    )
+    async with llm_errors():
+        result = await agent.ainvoke(
+            {
+                "messages": [
+                    {"role": "system", "content": INTERVIEW_PROMPT.format(subject=subject, total=TOTAL_QUESTIONS)},
+                    {"role": "user", "content": f"Start the interview with a short greeting and ask the first question about {subject}."},
+                ]
+            },
+            config=_config(session_id),
+        )
     return result["messages"][-1].text
 
 
@@ -50,7 +52,8 @@ async def reply_to_answer(agent, session_id: UUID, answer: str, is_last: bool) -
     messages = [HumanMessage(answer)]
     if is_last:
         messages.append(HumanMessage(CLOSING_NOTE))
-    result = await agent.ainvoke({"messages": messages}, config=_config(session_id))
+    async with llm_errors():
+        result = await agent.ainvoke({"messages": messages}, config=_config(session_id))
     return result["messages"][-1].text
 
 
@@ -60,4 +63,5 @@ async def generate_feedback(model, agent, session_id: UUID, subject: str) -> Fee
     # Called on the model directly, not through the agent, so the feedback
     # request is not written into the interview's conversation history.
     evaluator = model.with_structured_output(FeedbackResponse)
-    return await evaluator.ainvoke([*transcript, HumanMessage(FEEDBACK_PROMPT.format(subject=subject))])
+    async with llm_errors():
+        return await evaluator.ainvoke([*transcript, HumanMessage(FEEDBACK_PROMPT.format(subject=subject))])
