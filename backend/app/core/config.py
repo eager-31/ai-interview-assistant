@@ -14,6 +14,7 @@ class Settings(BaseSettings):
     jwt_secret: str = Field(min_length=32)
     jwt_expire_minutes: int = 60
     submit_answer_rate_limit: str = "10/minute"
+    cors_origins: str = "http://localhost:5173"
 
 
 settings = Settings()

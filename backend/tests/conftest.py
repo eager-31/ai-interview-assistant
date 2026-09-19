@@ -3,11 +3,13 @@ from uuid import UUID, uuid4
 
 import httpx
 import pytest
+from tenacity import wait_none
 from langchain_core.language_models.chat_models import BaseChatModel
 from langchain_core.messages import AIMessage
 from langchain_core.outputs import ChatGeneration, ChatResult
 from sqlalchemy import delete, select
 
+from app.core import retry
 from app.core.config import settings
 from app.core.db import create_engine_and_sessionmaker
 from app.core.limiter import limiter
@@ -15,6 +17,7 @@ from app.core.redis_client import create_redis
 from app.main import app
 from app.models import InterviewSession, User
 from app.schemas.interview import AnswerScore, BackgroundSummary, FeedbackEvaluation
+from app.services import stt
 from app.services.agent import build_agent
 
 
@@ -92,12 +95,79 @@ class StubFeedbackModel:
         return Evaluator()
 
 
+class FakeSpeechServices:
+    """Plays the part of AssemblyAI and Murf at the HTTP level, so the real service code runs against it."""
+
+    AUDIO = b"ID3-fake-mp3-bytes"
+
+    def __init__(self):
+        self.transcript = "a strong spoken answer"
+        self.transcript_error: str | None = None
+        self.polls_before_done = 1
+        self.murf_stream: httpx.AsyncByteStream | None = None
+        self.requests: list[httpx.Request] = []
+        self.failures: dict[str, list] = {}
+        self._polls = 0
+
+    def fail(self, step: str, *outcomes):
+        """The next calls to `step` (upload, transcript, poll or murf) answer with these statuses or raise these errors."""
+        self.failures.setdefault(step, []).extend(outcomes)
+
+    def calls(self, step: str) -> list[httpx.Request]:
+        return [r for r in self.requests if self._step(r) == step]
+
+    @staticmethod
+    def _step(request: httpx.Request) -> str:
+        if request.url.host == "global.api.murf.ai":
+            return "murf"
+        return {"/v2/upload": "upload", "/v2/transcript": "transcript"}.get(request.url.path, "poll")
+
+    def __call__(self, request: httpx.Request) -> httpx.Response:
+        step = self._step(request)
+        self.requests.append(request)
+        if self.failures.get(step):
+            outcome = self.failures[step].pop(0)
+            if isinstance(outcome, Exception):
+                raise outcome
+            return httpx.Response(outcome, json={"error": "injected failure"})
+
+        if step == "upload":
+            return httpx.Response(200, json={"upload_url": "https://cdn.assemblyai.com/upload/fake"})
+        if step == "transcript":
+            return httpx.Response(200, json={"id": "tr-1", "status": "queued"})
+        if step == "poll":
+            self._polls += 1
+            if self.transcript_error:
+                return httpx.Response(200, json={"status": "error", "error": self.transcript_error})
+            if self._polls <= self.polls_before_done:
+                return httpx.Response(200, json={"status": "processing"})
+            return httpx.Response(200, json={"status": "completed", "text": self.transcript})
+        if self.murf_stream is not None:
+            return httpx.Response(200, stream=self.murf_stream, headers={"content-type": "audio/mpeg"})
+        return httpx.Response(200, content=self.AUDIO, headers={"content-type": "audio/mpeg"})
+
+
+def mock_http(fake: FakeSpeechServices) -> httpx.AsyncClient:
+    return httpx.AsyncClient(transport=httpx.MockTransport(fake))
+
+
+@pytest.fixture(autouse=True)
+def _speech_test_settings(monkeypatch):
+    monkeypatch.setattr(settings, "assemblyai_api_key", "test-assemblyai-key")
+    monkeypatch.setattr(settings, "murf_api_key", "test-murf-key")
+    monkeypatch.setattr(retry, "RETRY_WAIT", wait_none())
+    monkeypatch.setattr(stt, "POLL_INTERVAL_SECONDS", 0)
+
+
 @asynccontextmanager
 async def running_app():
     """Starts the app (real Redis and Postgres) with only the LLM replaced by stubs."""
     async with app.router.lifespan_context(app):
         app.state.agent = build_agent(EchoModel(), app.state.agent.checkpointer)
         app.state.model = StubFeedbackModel()
+        app.state.speech = FakeSpeechServices()
+        await app.state.http.aclose()
+        app.state.http = mock_http(app.state.speech)
         transport = httpx.ASGITransport(app=app)
         async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
             yield client

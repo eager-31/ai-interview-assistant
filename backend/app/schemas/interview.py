@@ -3,6 +3,8 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
+MAX_ANSWER_CHARS = 5000
+
 
 class BackgroundSummary(BaseModel):
     """What the interviewer needs to know about the candidate, extracted from a resume and/or job description."""
@@ -21,13 +23,17 @@ class StartResponse(BaseModel):
 
 class AnswerRequest(BaseModel):
     session_id: UUID
-    answer: str = Field(min_length=1, max_length=5000)
+    answer: str = Field(min_length=1, max_length=MAX_ANSWER_CHARS)
 
 
 class AnswerResponse(BaseModel):
     question_number: int
     message: str
     interview_complete: bool
+
+
+class AudioAnswerResponse(AnswerResponse):
+    transcript: str
 
 
 class FeedbackRequest(BaseModel):

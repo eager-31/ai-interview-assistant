@@ -16,7 +16,7 @@ def _key(session_id: UUID) -> str:
     return f"session:{session_id}"
 
 
-async def create_session(redis: Redis, session_id: UUID, user_id: UUID, subject: str) -> None:
+async def create_session(redis: Redis, session_id: UUID, user_id: UUID, subject: str, message: str) -> None:
     key = _key(session_id)
     await redis.hset(
         key,
@@ -25,6 +25,8 @@ async def create_session(redis: Redis, session_id: UUID, user_id: UUID, subject:
             "subject": subject,
             "status": "in_progress",
             "question_number": 1,
+            # What the interviewer last said; the speech endpoint reads this aloud.
+            "last_message": message,
             "created_at": datetime.now(timezone.utc).isoformat(),
         },
     )
@@ -39,9 +41,14 @@ async def get_session(redis: Redis, session_id: UUID, user_id: UUID) -> dict[str
     return session
 
 
-async def advance_question(redis: Redis, session_id: UUID) -> int:
-    return await redis.hincrby(_key(session_id), "question_number", 1)
+async def advance_question(redis: Redis, session_id: UUID, message: str) -> int:
+    key = _key(session_id)
+    async with redis.pipeline() as pipe:
+        pipe.hincrby(key, "question_number", 1)
+        pipe.hset(key, "last_message", message)
+        question_number, _ = await pipe.execute()
+    return question_number
 
 
-async def mark_completed(redis: Redis, session_id: UUID) -> None:
-    await redis.hset(_key(session_id), "status", "completed")
+async def mark_completed(redis: Redis, session_id: UUID, message: str) -> None:
+    await redis.hset(_key(session_id), mapping={"status": "completed", "last_message": message})

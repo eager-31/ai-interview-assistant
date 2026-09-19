@@ -1,0 +1,199 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Design system preview</title>
+    <link rel="stylesheet" href="/src/styles/theme.css" />
+    <link rel="stylesheet" href="/src/styles/primitives.css" />
+    <style>
+      /* Layout for this specimen page only */
+      section { padding-block: var(--space-10); border-bottom: 1px solid var(--border-subtle); }
+      .grid { display: grid; gap: var(--space-4); }
+      .swatches { grid-template-columns: repeat(auto-fill, minmax(11rem, 1fr)); }
+      .swatch { border-radius: var(--radius-md); border: 1px solid var(--border); overflow: hidden; background: var(--bg-surface); }
+      .swatch-color { height: 4.5rem; }
+      .swatch-meta { padding: var(--space-3); font-size: var(--text-xs); display: grid; gap: 2px; }
+      .swatch-meta b { font-size: var(--text-sm); font-weight: 600; }
+      .scale-row { display: flex; align-items: baseline; gap: var(--space-6); padding-block: var(--space-2); border-bottom: 1px dashed var(--border-subtle); }
+      .scale-row code { min-width: 10rem; flex-shrink: 0; }
+      .space-bar { height: 12px; background: var(--accent); border-radius: 2px; }
+      .radius-box { width: 5.5rem; height: 5.5rem; background: var(--bg-raised); border: 1px solid var(--border-strong); display: grid; place-items: center; font-size: var(--text-xs); color: var(--text-2); }
+      .wave { display: flex; align-items: center; gap: 4px; height: 56px; }
+      .wave i { width: 4px; border-radius: 2px; background: var(--accent); }
+    </style>
+  </head>
+  <body>
+    <main class="container">
+      <section>
+        <p class="text-eyebrow">Design system</p>
+        <h1 class="text-display" style="margin-top: var(--space-3)">Sounds like a<br />real interview.</h1>
+        <p class="text-lead" style="max-width: 38rem; margin-top: var(--space-5)">
+          Warm charcoal surfaces, one amber accent (the colour of an “on air” light), and a grotesque display face with a clean body face.
+        </p>
+        <div class="row" style="margin-top: var(--space-8)">
+          <button class="btn btn-primary btn-lg">Start interview</button>
+          <button class="btn btn-secondary btn-lg">View history</button>
+        </div>
+      </section>
+
+      <section>
+        <h2>Colour</h2>
+        <p class="text-small" style="margin: var(--space-2) 0 var(--space-6)">Contrast ratios are measured, not eyeballed. Body text needs 4.5:1, borders on form controls need 3:1.</p>
+        <h4>Surfaces</h4>
+        <div class="grid swatches" style="margin: var(--space-3) 0 var(--space-6)">
+          <div class="swatch"><div class="swatch-color" style="background: #0c0b0a"></div><div class="swatch-meta"><b>bg-inset</b><span>#0C0B0A · inputs</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #100f0d"></div><div class="swatch-meta"><b>bg-page</b><span>#100F0D · page</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #181614"></div><div class="swatch-meta"><b>bg-surface</b><span>#181614 · cards</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #211f1b"></div><div class="swatch-meta"><b>bg-raised</b><span>#211F1B · hover, chips</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #2a2723"></div><div class="swatch-meta"><b>bg-hover</b><span>#2A2723</span></div></div>
+        </div>
+        <h4>Text</h4>
+        <div class="grid swatches" style="margin: var(--space-3) 0 var(--space-6)">
+          <div class="swatch"><div class="swatch-color" style="background: #ece7df"></div><div class="swatch-meta"><b>text-1</b><span>#ECE7DF · 15.6:1 on page</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #b0a99d"></div><div class="swatch-meta"><b>text-2</b><span>#B0A99D · 8.2:1 on page</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #958e83"></div><div class="swatch-meta"><b>text-3</b><span>#958E83 · 5.1:1 on raised</span></div></div>
+        </div>
+        <h4>Accent and status</h4>
+        <div class="grid swatches" style="margin-top: var(--space-3)">
+          <div class="swatch"><div class="swatch-color" style="background: #f2a93b"></div><div class="swatch-meta"><b>accent</b><span>#F2A93B · 9.6:1 on page</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #f7bc5e"></div><div class="swatch-meta"><b>accent-hover</b><span>#F7BC5E</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #d98f22"></div><div class="swatch-meta"><b>accent-pressed</b><span>#D98F22</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #74c08f"></div><div class="swatch-meta"><b>success</b><span>#74C08F · 8.3:1</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #e5766a"></div><div class="swatch-meta"><b>danger</b><span>#E5766A · 6.1:1</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #55b8a9"></div><div class="swatch-meta"><b>info / series 2</b><span>#55B8A9 · 7.6:1</span></div></div>
+          <div class="swatch"><div class="swatch-color" style="background: #7c9bd1"></div><div class="swatch-meta"><b>series 3</b><span>#7C9BD1 · 6.4:1 (charts only)</span></div></div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Typography</h2>
+        <p class="text-small" style="margin: var(--space-2) 0 var(--space-6)">
+          Headings: <b>Bricolage Grotesque</b> 600 and 700. Body: <b>Instrument Sans</b> 400, 500 and 600. Five font files, self-hosted.
+        </p>
+        <div class="scale-row"><code>display · 700</code><span class="text-display" style="font-size: 3.5rem">Voice-first</span></div>
+        <div class="scale-row"><code>3xl · h1</code><h1>Practice out loud</h1></div>
+        <div class="scale-row"><code>2xl · h2</code><h2>Your last five interviews</h2></div>
+        <div class="scale-row"><code>xl · h3</code><h3>Question 3 of 5</h3></div>
+        <div class="scale-row"><code>lg · h4</code><h4>Correctness, clarity, depth</h4></div>
+        <div class="scale-row"><code>md · lead</code><p class="text-lead">Explain how you would design a rate limiter for a public API.</p></div>
+        <div class="scale-row"><code>base · body</code><p>You handled the trade-off between accuracy and latency well, and gave a concrete example.</p></div>
+        <div class="scale-row"><code>sm · small</code><p class="text-small">Started 19 September, 4 minutes</p></div>
+        <div class="scale-row"><code>xs · eyebrow</code><p class="text-eyebrow">Question 3 of 5</p></div>
+        <div class="scale-row"><code>tabular figures</code><p>Scores line up: 4.0 · 3.5 · 12.5 · 100.0</p></div>
+      </section>
+
+      <section>
+        <h2>Spacing and radius</h2>
+        <div class="stack" style="margin-block: var(--space-6)">
+          <div class="scale-row"><code>space-1 · 4px</code><div class="space-bar" style="width: var(--space-1)"></div></div>
+          <div class="scale-row"><code>space-2 · 8px</code><div class="space-bar" style="width: var(--space-2)"></div></div>
+          <div class="scale-row"><code>space-4 · 16px</code><div class="space-bar" style="width: var(--space-4)"></div></div>
+          <div class="scale-row"><code>space-6 · 24px</code><div class="space-bar" style="width: var(--space-6)"></div></div>
+          <div class="scale-row"><code>space-8 · 32px</code><div class="space-bar" style="width: var(--space-8)"></div></div>
+          <div class="scale-row"><code>space-12 · 48px</code><div class="space-bar" style="width: var(--space-12)"></div></div>
+          <div class="scale-row"><code>space-16 · 64px</code><div class="space-bar" style="width: var(--space-16)"></div></div>
+        </div>
+        <div class="row" style="gap: var(--space-6)">
+          <div class="radius-box" style="border-radius: var(--radius-sm)">6px</div>
+          <div class="radius-box" style="border-radius: var(--radius-md)">10px</div>
+          <div class="radius-box" style="border-radius: var(--radius-lg)">16px</div>
+          <div class="radius-box" style="border-radius: var(--radius-xl)">24px</div>
+          <div class="radius-box" style="border-radius: var(--radius-pill)">pill</div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Buttons and cards</h2>
+        <div class="row" style="margin: var(--space-6) 0">
+          <button class="btn btn-primary">Primary</button>
+          <button class="btn btn-secondary">Secondary</button>
+          <button class="btn btn-ghost">Ghost</button>
+          <button class="btn btn-primary" aria-busy="true">Sending</button>
+          <button class="btn btn-primary" disabled>Disabled</button>
+        </div>
+        <p class="text-small">Hover the buttons and cards: they lift 1–3px, and pressing a button pushes it back down.</p>
+        <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr)); margin-top: var(--space-6)">
+          <div class="card">
+            <p class="text-eyebrow">Static card</p>
+            <h4 style="margin-top: var(--space-2)">Backend engineer</h4>
+            <p class="text-small" style="margin-top: var(--space-2)">Surface, hairline border, soft shadow.</p>
+          </div>
+          <div class="card card-interactive">
+            <div class="row" style="justify-content: space-between">
+              <span class="badge badge-accent">Python</span>
+              <span class="badge badge-success">Completed</span>
+            </div>
+            <h4 style="margin-top: var(--space-4)">4.0 / 5</h4>
+            <p class="text-small" style="margin-top: var(--space-2)">19 Sep · 5 questions</p>
+          </div>
+          <div class="card card-interactive">
+            <div class="row" style="justify-content: space-between">
+              <span class="badge badge-accent">Kubernetes</span>
+              <span class="badge">In progress</span>
+            </div>
+            <h4 style="margin-top: var(--space-4)">Question 3 of 5</h4>
+            <div class="progress" style="margin-top: var(--space-3)"><div class="progress-bar" style="width: 60%"></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Forms</h2>
+        <div class="grid" style="grid-template-columns: repeat(auto-fit, minmax(18rem, 1fr)); margin-top: var(--space-6)">
+          <div class="stack">
+            <div class="field">
+              <label class="field-label" for="s">Subject</label>
+              <input class="input" id="s" value="Python" />
+              <span class="field-hint">What should the interview be about?</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="e">Email</label>
+              <input class="input" id="e" value="not-an-email" aria-invalid="true" />
+              <span class="field-error">Enter a valid email address.</span>
+            </div>
+            <div class="field">
+              <label class="field-label" for="j">Job description (optional)</label>
+              <textarea class="textarea" id="j" placeholder="Paste the job description here"></textarea>
+            </div>
+          </div>
+          <div class="stack">
+            <div class="dropzone">
+              <span class="text-eyebrow">Resume (optional)</span>
+              <strong>Drop a PDF here, or click to choose</strong>
+              <span class="text-small">Up to 5 MB. Text-based PDFs only.</span>
+            </div>
+            <div class="alert alert-error"><div><p class="alert-title">The AI service is busy right now</p><p>Try again in a moment. Your answer was not lost.</p></div></div>
+            <div class="alert alert-success"><div><p class="alert-title">Resume read</p><p>Questions will be tailored to it.</p></div></div>
+            <div class="alert alert-info"><div><p class="alert-title">Microphone needed</p><p>Allow access when your browser asks.</p></div></div>
+          </div>
+        </div>
+      </section>
+
+      <section>
+        <h2>Loading and motion</h2>
+        <p class="text-small" style="margin: var(--space-2) 0 var(--space-6)">Skeletons keep the layout in place while data loads. A moving highlight replaces a spinner.</p>
+        <div class="grid" style="grid-template-columns: repeat(auto-fill, minmax(16rem, 1fr))">
+          <div class="card">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text" style="width: 90%"></div>
+            <div class="skeleton skeleton-text" style="width: 70%"></div>
+            <div class="skeleton" style="height: 6px; margin-top: var(--space-4)"></div>
+          </div>
+          <div class="card">
+            <div class="skeleton skeleton-title"></div>
+            <div class="skeleton skeleton-text" style="width: 80%"></div>
+            <div class="skeleton skeleton-text" style="width: 55%"></div>
+            <div class="skeleton" style="height: 6px; margin-top: var(--space-4)"></div>
+          </div>
+          <div class="card" style="display: grid; place-items: center; gap: var(--space-4)">
+            <div class="wave" aria-hidden="true">
+              <i style="height: 14px"></i><i style="height: 30px"></i><i style="height: 44px"></i><i style="height: 22px"></i><i style="height: 52px"></i><i style="height: 34px"></i><i style="height: 18px"></i><i style="height: 40px"></i><i style="height: 26px"></i><i style="height: 12px"></i>
+            </div>
+            <span class="text-small">The waveform uses the accent, too.</span>
+          </div>
+        </div>
+      </section>
+    </main>
+  </body>
+</html>

@@ -58,6 +58,35 @@ def _llm_failure(exc: Exception, status_code: int, error: str, message: str) -> 
     return ApiError(status_code, error, message)
 
 
+_SPEECH_SERVICES = {"stt": "speech-to-text service", "tts": "text-to-speech service"}
+
+
+def speech_not_configured(service: str) -> ApiError:
+    return ApiError(503, f"{service}_not_configured", f"The {_SPEECH_SERVICES[service]} is not set up on this server.")
+
+
+def http_failure(service: str, exc: httpx.HTTPError) -> ApiError:
+    """Maps a failed call to AssemblyAI ("stt") or Murf ("tts") to the same kinds of response the LLM errors use."""
+    name = _SPEECH_SERVICES[service]
+    status = exc.response.status_code if isinstance(exc, httpx.HTTPStatusError) else None
+    if isinstance(exc, httpx.TimeoutException):
+        error = ApiError(504, f"{service}_timeout", f"The {name} took too long to respond. Try again.")
+    elif status == 429:
+        error = ApiError(429, f"{service}_rate_limited", f"The {name} is over its request limit. Try again in a minute.")
+    elif status in (401, 403):
+        error = ApiError(502, f"{service}_auth_failed", f"The {name} rejected this server's credentials. This is a server configuration problem.")
+    elif status == 402:
+        error = ApiError(502, f"{service}_quota_exceeded", f"The {name} account is out of credit. This is a server problem.")
+    else:
+        error = ApiError(502, f"{service}_error", f"The {name} failed. Try again.")
+    logger.warning(
+        "speech service call failed",
+        extra={"service": service, "error": error.error, "upstream_status": status},
+        exc_info=error.error == f"{service}_error",
+    )
+    return error
+
+
 def register_error_handlers(app: FastAPI) -> None:
     @app.exception_handler(ApiError)
     async def api_error(request: Request, exc: ApiError):

@@ -4,6 +4,7 @@ from typing import Annotated
 from uuid import UUID, uuid4
 
 from fastapi import APIRouter, Depends, Form, HTTPException, Request, UploadFile
+from fastapi.responses import StreamingResponse
 from redis.asyncio import Redis
 from sqlalchemy.ext.asyncio import AsyncSession
 
@@ -16,8 +17,10 @@ from app.core.redis_client import get_redis
 from app.core.security import get_current_user
 from app.models import Feedback, User
 from app.schemas.interview import (
+    MAX_ANSWER_CHARS,
     AnswerRequest,
     AnswerScore,
+    AudioAnswerResponse,
     AnswerResponse,
     FeedbackRequest,
     FeedbackResponse,
@@ -27,7 +30,7 @@ from app.schemas.interview import (
     TurnOut,
 )
 from app.services import agent as interview_agent
-from app.services import records, scoring
+from app.services import records, scoring, stt, tts
 from app.services.resume import MAX_RESUME_BYTES, ResumeError, extract_resume_text
 from app.services import session as sessions
 
@@ -94,12 +97,44 @@ async def start_interview(
     question = await interview_agent.ask_first_question(request.app.state.agent, session_id, subject, system_prompt)
     # Stores are written after the LLM call succeeds so a failed start leaves no orphan session.
     await records.create_interview(db, session_id, user.id, subject, question)
-    await sessions.create_session(redis, session_id, user.id, subject)
+    await sessions.create_session(redis, session_id, user.id, subject, question)
     logger.info(
         "interview started",
         extra={"subject": subject, "user_id": str(user.id), "used_resume": bool(resume_text), "used_job_description": bool(job_description)},
     )
     return StartResponse(session_id=session_id, question_number=1, question=question)
+
+
+async def _load_open_session(redis: Redis, session_id: UUID, user: User) -> dict[str, str]:
+    session = await sessions.get_session(redis, session_id, user.id)
+    if session["status"] == "completed":
+        raise HTTPException(status_code=409, detail={"error": "interview_completed", "message": "This interview is already finished."})
+    return session
+
+
+async def _answer_turn(
+    request: Request, redis: Redis, db: AsyncSession, session_id: UUID, session: dict[str, str], answer: str
+) -> AnswerResponse:
+    """Everything that happens to a candidate's answer, whether it was typed or transcribed from speech."""
+    question_number = int(session["question_number"])
+    is_last = question_number >= interview_agent.TOTAL_QUESTIONS
+    turn = await records.get_turn(db, session_id, question_number)
+    # Independent calls, so they run together instead of one after the other.
+    message, score = await asyncio.gather(
+        interview_agent.reply_to_answer(request.app.state.agent, session_id, answer, is_last),
+        _score_without_failing(request.app.state.model, session["subject"], turn.question_text, answer),
+    )
+
+    await records.record_answer(db, turn, answer, None if is_last else message, score)
+    if is_last:
+        await sessions.mark_completed(redis, session_id, message)
+    else:
+        question_number = await sessions.advance_question(redis, session_id, message)
+    logger.info(
+        "answer recorded",
+        extra={"question_number": question_number, "interview_complete": is_last, "scored": score is not None},
+    )
+    return AnswerResponse(question_number=question_number, message=message, interview_complete=is_last)
 
 
 @router.post("/submit-answer", response_model=AnswerResponse)
@@ -112,29 +147,61 @@ async def submit_answer(
     user: User = Depends(get_current_user),
 ):
     bind_session(body.session_id)
-    session = await sessions.get_session(redis, body.session_id, user.id)
-    if session["status"] == "completed":
-        raise HTTPException(status_code=409, detail={"error": "interview_completed", "message": "This interview is already finished."})
+    session = await _load_open_session(redis, body.session_id, user)
+    return await _answer_turn(request, redis, db, body.session_id, session, body.answer)
 
-    question_number = int(session["question_number"])
-    is_last = question_number >= interview_agent.TOTAL_QUESTIONS
-    turn = await records.get_turn(db, body.session_id, question_number)
-    # Independent calls, so they run together instead of one after the other.
-    message, score = await asyncio.gather(
-        interview_agent.reply_to_answer(request.app.state.agent, body.session_id, body.answer, is_last),
-        _score_without_failing(request.app.state.model, session["subject"], turn.question_text, body.answer),
-    )
 
-    await records.record_answer(db, turn, body.answer, None if is_last else message, score)
-    if is_last:
-        await sessions.mark_completed(redis, body.session_id)
-    else:
-        question_number = await sessions.advance_question(redis, body.session_id)
-    logger.info(
-        "answer recorded",
-        extra={"question_number": question_number, "interview_complete": is_last, "scored": score is not None},
-    )
-    return AnswerResponse(question_number=question_number, message=message, interview_complete=is_last)
+@router.post("/submit-answer-audio", response_model=AudioAnswerResponse)
+@limiter.limit(lambda: settings.submit_answer_rate_limit)
+async def submit_answer_audio(
+    request: Request,
+    session_id: Annotated[UUID, Form()],
+    audio: UploadFile,
+    redis: Redis = Depends(get_redis),
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_user),
+):
+    bind_session(session_id)
+    # Checked before transcribing, so a wrong or finished session never costs a paid call.
+    session = await _load_open_session(redis, session_id, user)
+
+    data = await audio.read(stt.MAX_AUDIO_BYTES + 1)
+    if not data:
+        raise ApiError(422, "audio_empty", "The recording is empty. Try recording again.")
+    if len(data) > stt.MAX_AUDIO_BYTES:
+        raise ApiError(413, "audio_too_large", f"The recording must be {stt.MAX_AUDIO_BYTES // (1024 * 1024)} MB or smaller.")
+
+    transcript = (await stt.transcribe(request.app.state.http, data))[:MAX_ANSWER_CHARS]
+    if not transcript:
+        raise ApiError(422, "no_speech_detected", "We could not hear an answer in that recording. Try again.")
+    logger.info("answer transcribed", extra={"audio_bytes": len(data), "characters": len(transcript)})
+
+    answer = await _answer_turn(request, redis, db, session_id, session, transcript)
+    return AudioAnswerResponse(**answer.model_dump(), transcript=transcript)
+
+
+@router.get("/{session_id}/speech")
+@limiter.limit(lambda: settings.submit_answer_rate_limit)
+async def interviewer_speech(
+    request: Request,
+    session_id: UUID,
+    redis: Redis = Depends(get_redis),
+    user: User = Depends(get_current_user),
+):
+    """The interviewer's latest message as streamed audio. It takes no text, so it can only ever say what the interviewer said."""
+    bind_session(session_id)
+    session = await sessions.get_session(redis, session_id, user.id)
+    message = session.get("last_message")
+    if not message:
+        raise ApiError(409, "nothing_to_speak", "There is no interviewer message to read out for this session.")
+
+    speech = await tts.open_speech(request.app.state.http, message)
+    headers = {
+        "X-Question-Number": session["question_number"],
+        "X-Interview-Complete": "true" if session["status"] == "completed" else "false",
+        "Cache-Control": "no-store",
+    }
+    return StreamingResponse(speech.chunks(), media_type="audio/mpeg", headers=headers)
 
 
 @router.post("/get-feedback", response_model=FeedbackResponse)
