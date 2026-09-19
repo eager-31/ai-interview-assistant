@@ -42,10 +42,12 @@
   --danger-soft: rgb(229 118 106 / 0.12);
   --info-soft: rgb(85 184 169 / 0.12);
 
-  /* Chart series (correctness, clarity, depth): three hues that stay apart on the dark surface. */
-  --series-1: var(--accent);
-  --series-2: var(--info);
-  --series-3: #7c9bd1;
+  /* Chart series (correctness, clarity, depth), always in this order. Chart marks need their own colours:
+     the UI accent and status colours are too light and too close together to tell apart as bars.
+     Validated for the dark card surface: lightness band, chroma, colour-blind separation, contrast. */
+  --series-1: #c48225;
+  --series-2: #009e97;
+  --series-3: #7973ca;
 
   /* Type */
   --font-display: "Bricolage Grotesque", "Segoe UI", system-ui, sans-serif;
