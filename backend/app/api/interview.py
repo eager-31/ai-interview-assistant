@@ -17,6 +17,7 @@ from app.core.security import get_current_user
 from app.models import Feedback, User
 from app.schemas.interview import (
     AnswerRequest,
+    AnswerScore,
     AnswerResponse,
     FeedbackRequest,
     FeedbackResponse,
@@ -26,7 +27,7 @@ from app.schemas.interview import (
     TurnOut,
 )
 from app.services import agent as interview_agent
-from app.services import records
+from app.services import records, scoring
 from app.services.resume import MAX_RESUME_BYTES, ResumeError, extract_resume_text
 from app.services import session as sessions
 
@@ -37,7 +38,24 @@ logger = logging.getLogger(__name__)
 def _feedback_out(row: Feedback | None) -> FeedbackResponse | None:
     if row is None:
         return None
-    return FeedbackResponse(score=row.score, feedback=row.feedback_text, areas_of_improvement=row.areas_of_improvement)
+    return FeedbackResponse(
+        score=row.score,
+        correctness=row.correctness_avg,
+        clarity=row.clarity_avg,
+        depth=row.depth_avg,
+        feedback=row.feedback_text,
+        areas_of_improvement=row.areas_of_improvement,
+    )
+
+
+async def _score_without_failing(model, subject: str, question: str, answer: str) -> AnswerScore | None:
+    """A missing score is better than a failed interview turn, so any scoring error ends up here as None.
+    The reply to the candidate is what the turn needs; scores are extra."""
+    try:
+        return await scoring.score_answer(model, subject, question, answer)
+    except Exception:
+        logger.warning("answer left unscored", exc_info=True)
+        return None
 
 
 async def _read_resume(upload: UploadFile | None) -> str | None:
@@ -100,14 +118,22 @@ async def submit_answer(
 
     question_number = int(session["question_number"])
     is_last = question_number >= interview_agent.TOTAL_QUESTIONS
-    message = await interview_agent.reply_to_answer(request.app.state.agent, body.session_id, body.answer, is_last)
+    turn = await records.get_turn(db, body.session_id, question_number)
+    # Independent calls, so they run together instead of one after the other.
+    message, score = await asyncio.gather(
+        interview_agent.reply_to_answer(request.app.state.agent, body.session_id, body.answer, is_last),
+        _score_without_failing(request.app.state.model, session["subject"], turn.question_text, body.answer),
+    )
 
-    await records.record_answer(db, body.session_id, question_number, body.answer, None if is_last else message)
+    await records.record_answer(db, turn, body.answer, None if is_last else message, score)
     if is_last:
         await sessions.mark_completed(redis, body.session_id)
     else:
         question_number = await sessions.advance_question(redis, body.session_id)
-    logger.info("answer recorded", extra={"question_number": question_number, "interview_complete": is_last})
+    logger.info(
+        "answer recorded",
+        extra={"question_number": question_number, "interview_complete": is_last, "scored": score is not None},
+    )
     return AnswerResponse(question_number=question_number, message=message, interview_complete=is_last)
 
 
@@ -128,9 +154,14 @@ async def get_feedback(
     if interview.feedback is not None:
         return _feedback_out(interview.feedback)
 
-    feedback = await interview_agent.generate_feedback(
-        request.app.state.model, request.app.state.agent, body.session_id, session["subject"]
+    evaluation = await interview_agent.generate_feedback(
+        request.app.state.model,
+        request.app.state.agent,
+        body.session_id,
+        session["subject"],
+        scoring.describe_scores(interview.turns),
     )
+    feedback = scoring.build_feedback(evaluation, interview.turns)
     await records.save_feedback(db, body.session_id, feedback)
     logger.info("feedback generated", extra={"score": feedback.score})
     return feedback

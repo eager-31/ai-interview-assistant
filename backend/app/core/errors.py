@@ -12,7 +12,7 @@ from langchain_core.exceptions import (
     ModelRateLimitError,
     ModelTimeoutError,
 )
-from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError
+from langchain_google_genai.chat_models import ChatGoogleGenerativeAIError, GoogleAPIError
 from redis.exceptions import RedisError
 from slowapi.errors import RateLimitExceeded
 from sqlalchemy.exc import InterfaceError, OperationalError
@@ -45,6 +45,10 @@ async def llm_errors():
         raise _llm_failure(exc, 504, "llm_timeout", "The AI service took too long to respond. Try again.") from exc
     except (ModelAuthenticationError, ModelPermissionDeniedError, ModelNotFoundError) as exc:
         raise _llm_failure(exc, 502, "llm_auth_failed", "The AI service rejected this server's credentials or model. This is a server configuration problem.") from exc
+    except GoogleAPIError as exc:
+        if exc.code == 503:  # Google's "high demand" response, which passes on its own
+            raise _llm_failure(exc, 503, "llm_unavailable", "The AI service is busy right now. Try again in a moment.") from exc
+        raise _llm_failure(exc, 502, "llm_error", "The AI service failed to answer. Try again.") from exc
     except (ModelError, ChatGoogleGenerativeAIError, httpx.TransportError) as exc:
         raise _llm_failure(exc, 502, "llm_error", "The AI service failed to answer. Try again.") from exc
 

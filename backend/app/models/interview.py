@@ -1,7 +1,7 @@
 import uuid
 from datetime import datetime
 
-from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, UniqueConstraint, func
+from sqlalchemy import DateTime, Float, ForeignKey, Integer, String, Text, UniqueConstraint, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.core.db import Base
@@ -33,6 +33,11 @@ class Turn(Base):
     question_number: Mapped[int] = mapped_column(Integer)
     question_text: Mapped[str] = mapped_column(Text)
     answer_text: Mapped[str | None] = mapped_column(Text)
+    # Null until the answer is scored, and stays null if the scoring call failed.
+    correctness: Mapped[int | None] = mapped_column(Integer)
+    clarity: Mapped[int | None] = mapped_column(Integer)
+    depth: Mapped[int | None] = mapped_column(Integer)
+    score_comment: Mapped[str | None] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())
 
 
@@ -45,6 +50,10 @@ class Feedback(Base):
         ForeignKey("interview_sessions.id", ondelete="CASCADE"), unique=True
     )
     score: Mapped[int] = mapped_column(Integer)
+    # Averages of the per-answer scores; null when no answer in the interview could be scored.
+    correctness_avg: Mapped[float | None] = mapped_column(Float)
+    clarity_avg: Mapped[float | None] = mapped_column(Float)
+    depth_avg: Mapped[float | None] = mapped_column(Float)
     feedback_text: Mapped[str] = mapped_column(Text)
     areas_of_improvement: Mapped[str] = mapped_column(Text)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now())

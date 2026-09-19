@@ -8,6 +8,7 @@ import pytest
 import redis.exceptions
 from langchain_google_genai.chat_models import (
     ChatGoogleGenerativeAIError,
+    GoogleAPIError,
     GoogleAuthenticationError,
     GoogleModelNotFoundError,
     GoogleRateLimitError,
@@ -53,6 +54,8 @@ LLM_FAILURES = [
     (TimeoutError(), 504, "llm_timeout"),
     (GoogleAuthenticationError("bad key"), 502, "llm_auth_failed"),
     (GoogleModelNotFoundError("no such model"), 502, "llm_auth_failed"),
+    (GoogleAPIError(503, {"error": {"message": "high demand", "status": "UNAVAILABLE"}}), 503, "llm_unavailable"),
+    (GoogleAPIError(500, {"error": {"message": "internal", "status": "INTERNAL"}}), 502, "llm_error"),
     (ChatGoogleGenerativeAIError("boom"), 502, "llm_error"),
     (httpx.ConnectError("unreachable"), 502, "llm_error"),
 ]

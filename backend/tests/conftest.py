@@ -14,7 +14,7 @@ from app.core.limiter import limiter
 from app.core.redis_client import create_redis
 from app.main import app
 from app.models import InterviewSession, User
-from app.schemas.interview import BackgroundSummary, FeedbackResponse
+from app.schemas.interview import AnswerScore, BackgroundSummary, FeedbackEvaluation
 from app.services.agent import build_agent
 
 
@@ -48,18 +48,35 @@ class EchoModel(BaseChatModel):
 
 
 class StubFeedbackModel:
-    """Stands in for the real model wherever the app asks for structured output."""
+    """Stands in for the real model wherever the app asks for structured output.
+
+    Answers containing "strong" are graded 5/5/5 and "weak" 1/2/1; anything else is 3/3/3.
+    """
 
     def __init__(self):
         self.calls = 0
         self.summary_calls = 0
+        self.score_calls = 0
         self.last_summary_input = None
+        self.score_inputs: list[str] = []
+
+    async def grade(self, prompt: str) -> AnswerScore:
+        self.score_calls += 1
+        self.score_inputs.append(prompt)
+        answer = prompt.split("Answer:")[-1]
+        if "strong" in answer:
+            return AnswerScore(correctness=5, clarity=5, depth=5, comment="Strong answer.")
+        if "weak" in answer:
+            return AnswerScore(correctness=1, clarity=2, depth=1, comment="Weak answer.")
+        return AnswerScore(correctness=3, clarity=3, depth=3, comment="Adequate answer.")
 
     def with_structured_output(self, schema):
         model = self
 
         class Evaluator:
             async def ainvoke(self, messages):
+                if schema is AnswerScore:
+                    return await model.grade(str(messages))
                 if schema is BackgroundSummary:
                     model.summary_calls += 1
                     model.last_summary_input = messages
@@ -70,7 +87,7 @@ class StubFeedbackModel:
                     )
                 model.calls += 1
                 transcript = " | ".join(str(m.content) for m in messages)
-                return FeedbackResponse(score=3, feedback=transcript, areas_of_improvement="n/a")
+                return FeedbackEvaluation(overall_score=3, feedback=transcript, areas_of_improvement="n/a")
 
         return Evaluator()
 
